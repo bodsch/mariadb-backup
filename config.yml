@@ -13,18 +13,6 @@ connection:
   max_allowed_packet: ''
   single_transaction: true
 
-dump:
-  debug: false
-  dry_run: false
-  create_database: true
-  full_schema: true
-  dbstatus: false
-  use_separate_dirs: true
-  host_friendly: true
-  compression: bzip2
-  latest: true
-  latest_clean_filenames: true
-
 rotation:
   # Set rotation of daily backups. VALUE*24hours
   # If you want to keep only today's backups, you could choose 1, i.e. everything older than 24hours will be removed.

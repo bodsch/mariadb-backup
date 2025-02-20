@@ -54,7 +54,7 @@ class MariaDBBackup():
             "--directory",
             required=False,
             help="backup directory to store",
-            default='.'
+            default=os.getcwd()
         )
         p.add_argument(
             "-C",
@@ -88,28 +88,31 @@ class MariaDBBackup():
         """
         """
         if os.path.exists(self.config_file):
-            print(f"read config file: {self.config_file}")
+            if self.debug:
+                print(f"read config file: {self.config_file}")
             self.read_configuration(os.path.join(self.config_file))
             print("")
 
         """
             create output directory
         """
-        output_directory = os.path.join(self.backup_directory, self.datetime)
+        self.output_directory = os.path.join(self.backup_directory, self.datetime)
         try:
-            os.makedirs(output_directory, exist_ok=True)
+            os.makedirs(self.output_directory, exist_ok=True)
         except FileExistsError:
             pass
-
-        print("list databases ...")
+        if self.debug:
+            print(f"output directory: {self.output_directory}")
+            print("list databases ...")
         # db_status = self.check_database()
         all_db_names = self.list_databases()
 
         db_names = self.reduce_databases(all_databases=all_db_names)
 
-        print("dump databases ...")
-        print(f"  {db_names}")
-        os.chdir(output_directory)
+        if self.debug:
+            print("dump databases ...")
+            print(f"  {db_names}")
+        # os.chdir(output_directory)
         self.dump_databases(db_names)
 
     def read_configuration(self, filename):
@@ -130,13 +133,13 @@ class MariaDBBackup():
                     self.db_host = connection.get("host", None)
                     self.db_socket = connection.get("socket", None)
 
-                if dump:
-                    self.dump_create_database = dump.get("create_database", False)
-                    self.dump_full_schema = dump.get("full_schema", False)
-                    self.dump_dbstatus = dump.get("dbstatus", False)
-                    self.dump_use_separate_dirs = dump.get("use_separate_dirs", False)
-                    self.dump_host_friendly = dump.get("host_friendly", False)
-                    self.dump_single_transaction = dump.get("single_transaction", False)
+                # if dump:
+                #     self.dump_create_database = dump.get("create_database", False)
+                #     self.dump_full_schema = dump.get("full_schema", False)
+                #     # self.dump_dbstatus = dump.get("dbstatus", False)
+                #     # self.dump_use_separate_dirs = dump.get("use_separate_dirs", False)
+                #     # self.dump_host_friendly = dump.get("host_friendly", False)
+                #     # self.dump_single_transaction = dump.get("single_transaction", False)
 
                 if rotation:
                     self.rotation_daily = rotation.get("daily", 6)
@@ -153,49 +156,46 @@ class MariaDBBackup():
             '--opt',
             '--events']
 
-        opt_fullschema=[
-            '--all-databases',
+        opt_only_schema=[
             '--routines',
+            '--single-transaction',
             '--no-data']
+
+        opt_only_data=[
+            '--routines',
+            '--single-transaction',
+            '--no-create-info']
 
         opt_dbstatus=[
             '--status']
 
-        if self.dump_single_transaction:
-            opt.append('--single-transaction')
-            opt_fullschema.append('--single-transaction')
-
-        if self.dump_use_separate_dirs:
-            if self.dump_create_database:
-                # opt.append('--databases')
-                opt_fullschema.append('--databases')
-            else:
-                # opt.append('--no-create-db')
-                opt_fullschema.append('--no-create-db')
-        else:
-            # opt.append('--databases')
-            opt_fullschema.append('--databases')
-
         if len(self.db_username) != 0:
             opt.append('--user')
             opt.append(self.db_username)
-            opt_fullschema.append('--user')
-            opt_fullschema.append(self.db_username)
+            opt_only_schema.append('--user')
+            opt_only_schema.append(self.db_username)
+            opt_only_data.append('--user')
+            opt_only_data.append(self.db_username)
 
         if len(self.db_password) != 0:
             opt.append(f'--password={self.db_password}')
-            opt_fullschema.append(f'--password={self.db_password}')
+            opt_only_schema.append(f'--password={self.db_password}')
+            opt_only_data.append(f'--password={self.db_password}')
 
         if len(self.db_socket) != 0:
             opt.append('--socket')
             opt.append(self.db_socket)
-            opt_fullschema.append('--socket')
-            opt_fullschema.append(self.db_socket)
+            opt_only_schema.append('--socket')
+            opt_only_schema.append(self.db_socket)
+            opt_only_data.append('--socket')
+            opt_only_data.append(self.db_socket)
 
-        print(f"opt: {opt}")
-        print(f"opt_fullschema: {opt_fullschema}")
+        if self.debug:
+            print(f"opt: {opt}")
+            print(f"opt_only_schema: {opt_only_schema}")
+            print(f"opt_only_data: {opt_only_data}")
 
-        return (opt, opt_fullschema, opt_dbstatus)
+        return (opt, opt_only_schema, opt_only_data)
 
     def list_databases(self):
         """ """
@@ -206,7 +206,8 @@ class MariaDBBackup():
 
         query = "show databases"
 
-        print(f"   {bcolors.DEBUG}query: {query}{bcolors.ENDC}")
+        if self.debug:
+            print(f"   {bcolors.DEBUG}query: {query}{bcolors.ENDC}")
 
         try:
             cursor.execute(query)
@@ -222,7 +223,8 @@ class MariaDBBackup():
             for index in range(len(rows)):
                 all_db_names.append(rows[index].get("Database", None))
 
-        print(f"   {bcolors.DEBUG}{all_db_names}{bcolors.ENDC}")
+        if self.debug:
+            print(f"   {bcolors.DEBUG}{all_db_names}{bcolors.ENDC}")
 
         return all_db_names
 
@@ -245,41 +247,69 @@ class MariaDBBackup():
 
                 --databases test
         """
+        _output_directory = self.output_directory
         args = ["mariadb-dump"]
 
-        (opt, opt_fullschema, opt_dbstatus) = self.dump_options()
+        (opt, opt_only_schema, opt_only_data) = self.dump_options()
 
-        args += opt
-
-        if len(databases) != 0 and self.dump_use_separate_dirs:
+        if len(databases):
             """ """
             for dba in databases:
-                print(f"   {bcolors.DEBUG}dba: {dba}{bcolors.ENDC}")
+                if self.debug:
+                    print(f"   {bcolors.DEBUG}dba: {dba}{bcolors.ENDC}")
+
+                _directory = os.path.join(self.output_directory, dba)
+                try:
+                    os.makedirs(_directory, exist_ok=True)
+                    os.chdir(_directory)
+                except FileExistsError:
+                    pass
 
                 _args = list(args)
+                _args += list(opt_only_schema)
                 _args.append('--databases')
                 _args.append(dba)
 
-                sql_file_name = f"{dba}.sql"
+                sql_file_name = "schema.sql"
 
+                if self.debug:
+                    print(f"   {bcolors.DEBUG}schema{bcolors.ENDC}")
+                    print(f"   {bcolors.DEBUG}{_args}{bcolors.ENDC}")
                 self._dump(sql_file_name, _args)
 
                 _args = None
-        else:
-            _args = []
-            _args = args
-            _args.append('--all-databases')
 
-            sql_file_name = "database.sql"
+                _args = list(args)
+                _args += list(opt_only_data)
+                _args.append('--databases')
+                _args.append(dba)
 
-            self._dump(sql_file_name, _args)
+                sql_file_name = "data.sql"
+
+                if self.debug:
+                    print(f"   {bcolors.DEBUG}data{bcolors.ENDC}")
+                    print(f"   {bcolors.DEBUG}{_args}{bcolors.ENDC}")
+                self._dump(sql_file_name, _args)
+
+                _args = None
+
+                os.chdir(_output_directory)
+        # else:
+        #     _args = []
+        #     _args = args
+        #     _args.append('--all-databases')
+        #
+        #     sql_file_name = "database.sql"
+        #
+        #     self._dump(sql_file_name, _args)
 
 
     def _dump(self, dump_file, args):
 
         cmdline = list2cmdline(args)
 
-        print(f"args: {cmdline}")
+        if self.debug:
+            print(f"args: {cmdline}")
 
         stdout = open(dump_file, "w", 1)  # line-buffered
 
@@ -325,7 +355,8 @@ class MariaDBBackup():
         if self.db_socket is not None:
             config['unix_socket'] = self.db_socket
 
-        print(f"{bcolors.DEBUG}config : {config}{bcolors.ENDC}")
+        if self.debug:
+            print(f"{bcolors.DEBUG}config : {config}{bcolors.ENDC}")
 
         if mysql_driver is None:
             print(f"   {bcolors.FAIL}missing SQL driver{bcolors.ENDC}")
