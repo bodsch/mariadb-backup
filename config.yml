@@ -15,36 +15,18 @@ connection:
 
 rotation:
   # Set rotation of daily backups. VALUE*24hours
-  # If you want to keep only today's backups, you could choose 1, i.e. everything older than 24hours will be removed.
-  daily: 6
-  # Set rotation for weekly backups. VALUE*24hours
-  weekly: 12
-  # Set rotation for monthly backups. VALUE*24hours
-  monthly: 3
-  # Which day do you want monthly backups? (01 to 31)
-  # If the chosen day is greater than the last day of the month, it will be done
-  # on the last day of the month.
-  # Set to 0 to disable monthly backups.
-  do_monthly: "01"
-  # Which day do you want weekly backups? (1 to 7 where 1 is Monday)
-  # Set to 0 to disable weekly backups.
-  do_weekly: "5"
+  # If you want to keep only today's backups, you could choose 1,
+  # i.e. everything older than 24hours will be removed.
+  daily: 2
+  weekly: 2
 
 notification:
-  enabled: false
-  # - log   : send only log file
-  # - files : send log file and sql files as attachments (see docs)
-  # - stdout : will simply output the log to the screen if run manually.
-  # - quiet : Only send logs if an error occurs to the MAILADDR.
-  mail_content: 'stdout'
-  # Set the maximum allowed email size in k. (4000 = approx 5MB email [see docs])
-  mail_maxattsize: 4000
-  # Allow packing of files with tar and splitting it in pieces of mail_maxattsize.
-  mail_splitandtar: true
-  # Use uuencode instead of mutt. WARNING: Not all email clients work well with uuencoded attachments.
-  mail_use_uuencoded_attachments: false
-  # Email Address to send mail to? (user@domain.com)
-  mail_address: root
+  enabled: true
+  smtp:
+    server_name: ""             # smtp.example.com
+    port: ""                    # 587
+  sender: ""                    # backup@example.com
+  recipient: ""                 # admin@foo.bar
 
 excludes:
   databases:
