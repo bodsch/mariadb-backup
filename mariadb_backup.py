@@ -9,7 +9,7 @@ import argparse
 import datetime
 import shutil
 from pathlib import Path
-from subprocess import Popen, list2cmdline
+from subprocess import Popen, PIPE, list2cmdline
 
 try:
     import MySQLdb as mysql_driver
@@ -386,10 +386,9 @@ class MariaDBBackup():
         cmdline = list2cmdline(args)
 
         stdout = open(dump_file, "w", 1)      # line-buffered
-        stderr = open("/dev/stdout", "w", 1)  # line-buffered
 
         try:
-            process = Popen(args, stdout=stdout, stderr=stderr, close_fds=True)
+            process = Popen(args, stdout=stdout, stderr=sys.stderr, close_fds=True)
 
             if process.returncode and process.returncode > 1:
                 logging.error(
@@ -400,10 +399,9 @@ class MariaDBBackup():
 
                 for line in process.stdout:
                     sys.stdout.write(line)
-                    # log_file.write(line)
+
             process.wait()
             stdout.close()
-            stderr.close()
 
             # ret_code = process.wait()
         except OSError:
