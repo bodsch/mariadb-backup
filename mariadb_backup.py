@@ -129,7 +129,7 @@ class MariaDBBackup():
             "%(asctime)s - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
 
         # Datei-Logging (speichert ALLE Logs mit passendem Format)
-        file_handler = logging.FileHandler("app.log")
+        file_handler = logging.FileHandler("/var/log/mariadb-backup.log")
         file_handler.setLevel(log_level_numeric)
         file_handler.setFormatter(
             debug_formatter if log_level_numeric == logging.DEBUG else standard_formatter)
