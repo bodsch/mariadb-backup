@@ -206,6 +206,7 @@ class MariaDBBackup():
                     self.db_username = connection.get("username", None)
                     self.db_password = connection.get("password", None)
                     self.db_host = connection.get("host", None)
+                    self.db_port = connection.get("port", None)
                     self.db_socket = connection.get("socket", None)
 
                 if rotation:
@@ -258,13 +259,35 @@ class MariaDBBackup():
             opt_only_schema.append(f'--password={self.db_password}')
             opt_only_data.append(f'--password={self.db_password}')
 
-        if len(self.db_socket) != 0:
+        if self.db_socket and len(self.db_socket) != 0:
             opt.append('--socket')
             opt.append(self.db_socket)
             opt_only_schema.append('--socket')
             opt_only_schema.append(self.db_socket)
             opt_only_data.append('--socket')
             opt_only_data.append(self.db_socket)
+
+        if self.db_host and len(self.db_host) != 0:
+            opt.append('--host')
+            opt.append(self.db_host)
+            opt_only_schema.append('--host')
+            opt_only_schema.append(self.db_host)
+            opt_only_data.append('--host')
+            opt_only_data.append(self.db_host)
+            if self.db_port is not None:
+                opt.append('--port')
+                opt.append(str(self.db_port))
+                opt_only_schema.append('--port')
+                opt_only_schema.append(str(self.db_port))
+                opt_only_data.append('--port')
+                opt_only_data.append(str(self.db_port))
+            else:
+                opt.append('--port')
+                opt.append(str(3306))
+                opt_only_schema.append('--port')
+                opt_only_schema.append(str(3306))
+                opt_only_data.append('--port')
+                opt_only_data.append(str(3306))
 
         return (opt, opt_only_schema, opt_only_data)
 
@@ -403,8 +426,16 @@ class MariaDBBackup():
             config['user'] = self.db_username
         if self.db_password is not None:
             config['passwd'] = self.db_password
+        if self.db_host is not None:
+            config['host'] = self.db_host
+            if self.db_port is not None:
+                config['port'] = self.db_port
+            else:
+                config['port'] = 3306
+
         if self.db_socket is not None:
             config['unix_socket'] = self.db_socket
+
 
         # logging.debug(f"{bcolors.DEBUG}config : {config}{bcolors.ENDC}")
 
