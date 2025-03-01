@@ -2,8 +2,8 @@
 
 connection:
   encrypted_login: false
-  username: 'backup'
-  password: 'backUp'
+  username: ''
+  password: ''
   host: ''
   port: ''
   socket: /run/mysqld/mysqld.sock
@@ -21,7 +21,7 @@ rotation:
   weekly: 2
 
 notification:
-  enabled: true
+  enabled: false
   smtp:
     server_name: ""             # smtp.example.com
     port: ""                    # 587

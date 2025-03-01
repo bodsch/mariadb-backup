@@ -64,7 +64,6 @@ class MariaDBBackup():
         self.config_file = self.args.config
         self.mycnf_file = self.args.mycnf
         self.dry_run = self.args.dry_run
-        self.debug = self.args.debug
         self.log_level = self.args.log_level
 
         self.log_memory_handler = MemoryLogHandler()
@@ -363,8 +362,8 @@ class MariaDBBackup():
 
         cmdline = list2cmdline(args)
 
-        stdout = open(dump_file, "w", 1)  # line-buffered
-        stderr = open("/tmp/mysql_backup.err", "w", 1)  # line-buffered
+        stdout = open(dump_file, "w", 1)      # line-buffered
+        stderr = open("/dev/stdout", "w", 1)  # line-buffered
 
         try:
             process = Popen(args, stdout=stdout, stderr=stderr, close_fds=True)
