@@ -364,8 +364,6 @@ class MariaDBBackup():
                     self.rotation_daily = rotation.get("daily", 3)
                     self.rotation_weekly = rotation.get("weekly", 2)
 
-                notification = data.get("notification", {})
-
                 if notification:
                     self.notification_enabled = notification.get(
                         "enabled", False)
