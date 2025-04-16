@@ -8,6 +8,7 @@ import logging
 import argparse
 import datetime
 import shutil
+import socket
 from pathlib import Path
 from subprocess import Popen, PIPE, list2cmdline
 
@@ -50,6 +51,151 @@ class MemoryLogHandler(logging.Handler):
     def get_logs(self):
         """Gibt alle Logs als String zurück"""
         return "\n".join(self.log_messages)
+
+
+class SMTPManager:
+    """
+    """
+
+    def __init__(self, logging, subject, sender={}, recipient={}, smtp={}, body=None):
+        """
+        """
+        self.logging = logging
+
+        self.subject = subject
+        self.body = body
+        self.sender = sender
+        self.recipient = recipient
+        self.smtp = smtp
+
+        self.init_smtp()
+
+    def init_smtp(self):
+
+        self.sender_email = self.sender.get("email", None)
+        self.recipient_email = self.recipient.get("email", None)
+
+        self.smtp_server = self.smtp.get("server_name", None)
+        self.smtp_port = self.smtp.get("port", None)
+        self.smtp_tls = self.smtp.get("tls", True)
+        self.smtp_auth_username = self.smtp.get("auth", {}).get("username", None)
+        self.smtp_auth_password = self.smtp.get("auth", {}).get("password", None)
+
+        logging.debug("--------------------------------------------------")
+        logging.debug(f" subject      : {self.subject}")
+        logging.debug(f" sender       : {self.sender}")
+        logging.debug(f" recipient    : {self.recipient}")
+        logging.debug(f" smtp         : {self.smtp}")
+        logging.debug("--------------------------------------------------")
+
+        logging.debug("--------------------------------------------------")
+        logging.debug("sending email")
+        logging.debug(f"  - from       : {self.sender_email}")
+        logging.debug(f"  - to         : {self.recipient_email}")
+        logging.debug(f"  - subject    : {self.subject}")
+        logging.debug("  - body       :")
+
+        for line in self.body.splitlines():
+            logging.debug(f"     {line}")
+
+        logging.debug(f"  - smtp server: {self.smtp_server}:{self.smtp_port} {self.smtp_tls}")
+        logging.debug("--------------------------------------------------")
+
+    def send_email(self):
+        """
+            Sendet die gespeicherten Logs per E-Mail.
+        """
+        import smtplib
+        import ssl
+        from email.mime.text import MIMEText
+
+        # email_body = self.log_memory_handler.get_logs()
+        # subject = f"renew TLS certificates at {socket.getfqdn()} - {self.datetime_readable}"
+        #
+        # logging.debug("sending email")
+        # logging.debug(f"  - from   : {self.notification_sender}")
+        # logging.debug(f"  - to     : {self.notification_recipient}")
+        # logging.debug(f"  - subject: {subject}")
+        # logging.debug("  - body   :")
+        # for line in email_body.splitlines():
+        #     logging.debug(f"     {bcolors.FAIL}{line}{bcolors.ENDC}")
+
+        if self.smtp_server and self.sender_email and self.recipient_email:
+            """
+            """
+            msg = MIMEText(self.body)
+            msg["Subject"] = self.subject
+            msg["From"] = self.sender_email
+            msg["To"] = self.recipient_email
+
+            if self.smtp_tls:
+                # Create a secure SSL context
+                context = ssl.create_default_context()
+
+            try:
+                server = smtplib.SMTP(host=self.smtp_server, port=int(self.smtp_port))
+                """
+                """
+                logging.debug("smtp connected")
+
+                server.set_debuglevel(2)
+                server.ehlo(name="boone-schulz.de")
+
+                if self.smtp_tls:
+                    logging.debug("smtp starttls")
+                    server.starttls(context=context)
+                    server.ehlo(name="boone-schulz.de")
+
+                if self.smtp_auth_username and self.smtp_auth_password:
+                    logging.debug("smtp auth")
+                    try:
+                        server.esmtp_features['auth'] = 'LOGIN PLAIN'
+                        server.login(self.smtp_auth_username, self.smtp_auth_password)
+                    except smtplib.SMTPHeloError as e:
+                        logging.error(f"smtplib.SMTPHeloError: {e}")
+                    except smtplib.SMTPAuthenticationError as e:
+                        logging.error(f"smtplib.SMTPAuthenticationError: {e}")
+                    except smtplib.SMTPNotSupportedError as e:
+                        logging.error(f"smtplib.SMTPNotSupportedError: {e}")
+                    except smtplib.SMTPException as e:
+                        logging.error(f"smtplib.SMTPException: {e}")
+
+                logging.debug("smtp sendmail")
+                server.sendmail(
+                    from_addr=self.sender_email,
+                    to_addrs=self.recipient_email,
+                    msg=msg.as_string()
+                )
+                server.quit()
+
+                logging.info("email was successfully sent.")
+
+            except smtplib.SMTPServerDisconnected:
+                logging.error("smtplib.SMTPServerDisconnected")
+            except smtplib.SMTPResponseException as e:
+                logging.error("smtplib.SMTPResponseException:")
+                logging.error(f"   {str(e.smtp_code)}  {str(e.smtp_error)}")
+            except smtplib.SMTPSenderRefused:
+                logging.error("smtplib.SMTPSenderRefused")
+            except smtplib.SMTPRecipientsRefused:
+                logging.error("smtplib.SMTPRecipientsRefused")
+            except smtplib.SMTPDataError:
+                logging.error("smtplib.SMTPDataError")
+            except smtplib.SMTPConnectError:
+                logging.error("smtplib.SMTPConnectError")
+            except smtplib.SMTPHeloError:
+                logging.error("smtplib.SMTPHeloError")
+            except smtplib.SMTPAuthenticationError:
+                logging.error("smtplib.SMTPAuthenticationError")
+
+            except socket.error as e:
+                logging.error("could not connect:")
+                logging.error(f"  {e}")
+            except Exception as e:
+                logging.error("Fehler beim Senden der E-Mail:")
+                logging.error(f"  {e}")
+        else:
+            logging.error("missing smtp server_nemr, or sender, or recipient.")
 
 
 class MariaDBBackup():
@@ -152,7 +298,7 @@ class MariaDBBackup():
     def run(self):
         """
         """
-        logging.info(f"MariaDB Backup at {self.datetime_readable} ...")
+        logging.info(f"MariaDB Backup at {socket.getfqdn()} - {self.datetime_readable} ...")
         if os.path.exists(self.config_file):
             logging.debug(f"read config file: {self.config_file}")
             self.read_configuration(os.path.join(self.config_file))
@@ -381,6 +527,9 @@ class MariaDBBackup():
 
                 os.chdir(_output_directory)
 
+                # create zip archive ...
+                # shutil.make_archive(_directory, 'zip', _directory)
+
     def _dump(self, dump_file, args):
 
         cmdline = list2cmdline(args)
@@ -388,12 +537,19 @@ class MariaDBBackup():
         stdout = open(dump_file, "w", 1)      # line-buffered
 
         try:
-            process = Popen(args, stdout=stdout, stderr=sys.stderr, close_fds=True)
+            process = Popen(args, stdout=stdout, stderr=PIPE, close_fds=True)
+            _, stderr = process.communicate()
+            rc = process.returncode
 
-            if process.returncode and process.returncode > 1:
+            if rc and rc > 1:
                 logging.error(
-                    f"   {bcolors.FAIL}{cmdline} failed. Code {process.returncode}. Output follows below.{bcolors.ENDC}")
-                logging.error(f"   {bcolors.FAIL}{stderr}{bcolors.ENDC}")
+                    f"   {bcolors.FAIL}{cmdline} failed. Code {rc}. Output follows below.{bcolors.ENDC}")
+
+                _stderr = f"{stderr.rstrip()}"
+                _stderr_lines = _stderr.split("\n")
+
+                for _se in _stderr_lines:
+                    logging.error(f"   {bcolors.FAIL}{_se}{bcolors.ENDC}")
                 logging.error(f"   dump file: {dump_file}")
                 logging.error(f"   cmd line : {cmdline}")
 
@@ -424,9 +580,9 @@ class MariaDBBackup():
             config['user'] = self.db_username
         if self.db_password is not None:
             config['passwd'] = self.db_password
-        if self.db_host is not None:
+        if self.db_host is not None and len(str(self.db_host)) > 0:
             config['host'] = self.db_host
-            if self.db_port is not None:
+            if self.db_port is not None and len(str(self.db_port)) > 0:
                 config['port'] = self.db_port
             else:
                 config['port'] = 3306
@@ -434,8 +590,7 @@ class MariaDBBackup():
         if self.db_socket is not None:
             config['unix_socket'] = self.db_socket
 
-
-        # logging.debug(f"{bcolors.DEBUG}config : {config}{bcolors.ENDC}")
+        logging.debug(f"{bcolors.DEBUG}config : {config}{bcolors.ENDC}")
 
         if mysql_driver is None:
             logging.error(f"   {bcolors.FAIL}missing SQL driver{bcolors.ENDC}")
@@ -448,7 +603,7 @@ class MariaDBBackup():
         except Exception as e:
             message = "unable to connect to database.\n"
             message += f"  Exception message: {e}\n"
-            message += "    check login_host, login_user and login_password are correct \n"
+            message += "    check 'login_host', 'login_user' and 'login_password' are correct \n"
             message += f"    or {config_file} has the credentials. "
 
             logging.error(f"  {bcolors.FAIL}{message}{bcolors.ENDC}")
@@ -548,45 +703,38 @@ class MariaDBBackup():
         """
             Sendet die gespeicherten Logs per E-Mail.
         """
-        import smtplib
-        from email.mime.text import MIMEText
-
-        email_body = self.log_memory_handler.get_logs()
-        subject = f"Database Backup - {self.datetime_readable}"
-        # sender = "deine@email.com"
-        # recipient = "empfaenger@email.com"
-
-        logging.debug("sending email")
-        logging.debug(f"  - from   : {self.notification_sender}")
-        logging.debug(f"  - to     : {self.notification_recipient}")
-        logging.debug(f"  - subject: {subject}")
-        logging.debug("  - body   :")
-        for line in email_body.splitlines():
-            logging.debug(f"     {bcolors.FAIL}{line}{bcolors.ENDC}")
-
         if self.notification_smtp_host and self.notification_sender and self.notification_recipient:
-            """
-            """
-            msg = MIMEText(email_body)
-            msg["Subject"] = subject
-            msg["From"] = self.notification_sender
-            msg["To"] = self.notification_recipient
-
-            try:
-                with smtplib.SMTP("smtp.example.com", 587) as server:
-                    server.starttls()
-                    server.login("deine@email.com", "dein_passwort")
-                    server.sendmail(
-                        self.notification_sender,
-                        self.notification_recipient,
-                        msg.as_string()
-                    )
-                logging.info("email was successfully sent.")
-            except Exception as e:
-                logging.error("Fehler beim Senden der E-Mail:")
-                logging.error(f"  {e}")
+            pass
         else:
             logging.error("missing smtp server_nemr, or sender, or recipient.")
+            return
+
+        smtp = SMTPManager(
+            logging=logging,
+            subject=f"Database Backup at {socket.getfqdn()} - {self.datetime_readable}",
+            sender=dict(
+                email=self.notification_sender
+            ),
+            recipient=dict(
+                email=self.notification_recipient
+            ),
+            smtp=dict(
+                server_name=self.notification_smtp_host,
+                port=self.notification_smtp_port,
+                tls=self.notification_smtp_tls,
+                auth=dict(
+                    username=self.notification_smtp_username,
+                    password=self.notification_smtp_password
+                )
+            ),
+            body=self.log_memory_handler.get_logs()
+        )
+
+        if self.dry_run:
+            logging.info("send not email, we are in dry run ...")
+            return
+
+        smtp.send_email()
 
 
 if __name__ == '__main__':
