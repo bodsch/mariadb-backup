@@ -338,6 +338,9 @@ class MariaDBBackup():
         """
         """
         self.notification_enabled = False
+        self.notification_smtp_host = None
+        self.notification_sender = None
+        self.notification_recipient = None
 
         self.db_skip_ssl = True
 
@@ -361,6 +364,8 @@ class MariaDBBackup():
                     self.rotation_daily = rotation.get("daily", 3)
                     self.rotation_weekly = rotation.get("weekly", 2)
 
+                notification = data.get("notification", {})
+
                 if notification:
                     self.notification_enabled = notification.get(
                         "enabled", False)
@@ -368,6 +373,12 @@ class MariaDBBackup():
                         "smtp", {}).get("server_name", None)
                     self.notification_smtp_port = notification.get(
                         "smtp", {}).get("port", 587)
+                    self.notification_smtp_tls = notification.get(
+                        "smtp", {}).get("tls", True)
+                    smtp_auth = notification.get("smtp", {}).get("auth", {})
+                    self.notification_smtp_username = smtp_auth.get("username", None)
+                    self.notification_smtp_password = smtp_auth.get("password", None)
+
                     self.notification_sender = notification.get("sender", None)
                     self.notification_recipient = notification.get(
                         "recipient", None)
