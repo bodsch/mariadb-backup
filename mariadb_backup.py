@@ -339,6 +339,8 @@ class MariaDBBackup():
         """
         self.notification_enabled = False
 
+        self.db_skip_ssl = True
+
         with open(filename) as file:
             content = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -434,6 +436,11 @@ class MariaDBBackup():
                 opt_only_schema.append(str(3306))
                 opt_only_data.append('--port')
                 opt_only_data.append(str(3306))
+
+        if self.db_skip_ssl:
+            opt.append('--skip-ssl')
+            opt_only_schema.append('--skip-ssl')
+            opt_only_data.append('--skip-ssl')
 
         return (opt, opt_only_schema, opt_only_data)
 
