@@ -113,6 +113,7 @@ class SMTPManager:
         # konvertiere Escpae Sequencen zu html tags
         conv = Ansi2HTMLConverter(inline=True)
         html_text = conv.convert(self.body, full=False)
+        html_text = f"<pre style='font-family: monospace;'>{html_text}</pre>"
 
         Multipart-Mail vorbereiten (plain + html)
         msg = MIMEMultipart("alternative")
