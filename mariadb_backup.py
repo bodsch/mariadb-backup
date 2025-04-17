@@ -123,7 +123,7 @@ class SMTPManager:
         if self.smtp_server and self.sender_email and self.recipient_email:
             """
             """
-            msg = MIMEText(self.body)
+            msg = MIMEText(self.(remove_ansi_escape_sequences(self.body))
             msg["Subject"] = self.subject
             msg["From"] = self.sender_email
             msg["To"] = self.recipient_email
@@ -138,7 +138,7 @@ class SMTPManager:
                 """
                 logging.debug("smtp connected")
 
-                server.set_debuglevel(2)
+                # server.set_debuglevel(2)
                 server.ehlo(name="boone-schulz.de")
 
                 if self.smtp_tls:
@@ -196,6 +196,10 @@ class SMTPManager:
                 logging.error(f"  {e}")
         else:
             logging.error("missing smtp server_nemr, or sender, or recipient.")
+
+    def remove_ansi_escape_sequences(self, text):
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
 
 
 class MariaDBBackup():

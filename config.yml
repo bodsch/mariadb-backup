@@ -25,6 +25,10 @@ notification:
   smtp:
     server_name: ""             # smtp.example.com
     port: ""                    # 587
+    tls: false
+    auth:
+      username: ""
+      password: ""
   sender: ""                    # backup@example.com
   recipient: ""                 # admin@foo.bar
 
