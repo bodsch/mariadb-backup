@@ -115,7 +115,6 @@ class SMTPManager:
         html_text = conv.convert(self.body, full=False)
         html_text = f"<pre style='font-family: monospace;'>{html_text}</pre>"
 
-        Multipart-Mail vorbereiten (plain + html)
         msg = MIMEMultipart("alternative")
 
         part1 = MIMEText(self.remove_ansi_escape_sequences(self.body), "plain")
