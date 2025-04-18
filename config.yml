@@ -13,12 +13,14 @@ connection:
   max_allowed_packet: ''
   single_transaction: true
 
-rotation:
-  # Set rotation of daily backups. VALUE*24hours
-  # If you want to keep only today's backups, you could choose 1,
-  # i.e. everything older than 24hours will be removed.
-  daily: 2
-  weekly: 2
+storage:
+  destination: /var/backup
+  rotation:
+    # Set rotation of daily backups. VALUE*24hours
+    # If you want to keep only today's backups, you could choose 1,
+    # i.e. everything older than 24hours will be removed.
+    daily: 2
+    weekly: 2
 
 notification:
   enabled: false

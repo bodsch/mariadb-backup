@@ -319,6 +319,7 @@ class MariaDBBackup():
         """
         """
         logging.info(f"MariaDB Backup at {socket.getfqdn()} - {self.datetime_readable} ...")
+
         if os.path.exists(self.config_file):
             logging.debug(f"read config file: {self.config_file}")
             self.read_configuration(os.path.join(self.config_file))
@@ -369,6 +370,7 @@ class MariaDBBackup():
 
             if content:
                 connection = content.get("connection", {})
+                storage = content.get("storage", {})
                 rotation = content.get("rotation", {})
                 notification = content.get("notification", {})
                 excludes = content.get("excludes", {})
@@ -380,7 +382,10 @@ class MariaDBBackup():
                     self.db_port = connection.get("port", None)
                     self.db_socket = connection.get("socket", None)
 
-                if rotation:
+                if storage:
+                    storage_destination = storage.get("destination", {})
+                    rotation = storage.get("rotation", {})
+
                     self.rotation_daily = rotation.get("daily", 3)
                     self.rotation_weekly = rotation.get("weekly", 2)
 
