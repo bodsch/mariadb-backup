@@ -363,6 +363,9 @@ class MariaDBBackup():
         self.notification_sender = None
         self.notification_recipient = None
 
+        self.rotation_daily = 3
+        self.rotation_weekly = 2
+
         self.db_skip_ssl = True
 
         with open(filename) as file:
@@ -747,7 +750,7 @@ class MariaDBBackup():
         if self.notification_smtp_host and self.notification_sender and self.notification_recipient:
             pass
         else:
-            logging.error("missing smtp server_nemr, or sender, or recipient.")
+            logging.error("missing smtp server_name, or sender, or recipient.")
             return
 
         smtp = SMTPManager(
