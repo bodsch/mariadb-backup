@@ -9,6 +9,9 @@ import argparse
 import datetime
 import shutil
 import socket
+import ssl
+import atexit
+import tempfile
 from pathlib import Path
 from subprocess import Popen, PIPE, list2cmdline
 
@@ -210,7 +213,7 @@ class SMTPManager:
                 logging.error("Fehler beim Senden der E-Mail:")
                 logging.error(f"  {e}")
         else:
-            logging.error("missing smtp server_nemr, or sender, or recipient.")
+            logging.error("missing smtp server_name, or sender, or recipient.")
 
     def remove_ansi_escape_sequences(self, text):
         import re
@@ -232,6 +235,8 @@ class MariaDBBackup():
         self.dry_run = self.args.dry_run
         self.log_level = self.args.log_level
 
+        self.defaults_file = None
+
         self.log_memory_handler = MemoryLogHandler()
         self.setup_logging()
 
@@ -248,8 +253,9 @@ class MariaDBBackup():
             "-d",
             "--directory",
             required=False,
-            help="backup directory to store",
-            default=os.getcwd()
+            help="backup directory to store (overrides storage.destination from config; "
+                 "defaults to storage.destination or the current working directory)",
+            default=None
         )
         p.add_argument(
             "-C",
@@ -267,6 +273,7 @@ class MariaDBBackup():
         p.add_argument(
             "--dry-run",
             required=False,
+            action="store_true",
             help="do nothing",
             default=False
         )
@@ -320,10 +327,25 @@ class MariaDBBackup():
         """
         logging.info(f"MariaDB Backup at {socket.getfqdn()} - {self.datetime_readable} ...")
 
-        if os.path.exists(self.config_file):
-            logging.debug(f"read config file: {self.config_file}")
-            self.read_configuration(os.path.join(self.config_file))
-            print("")
+        logging.debug(f"read config file: {self.config_file}")
+        self.read_configuration(self.config_file)
+        print("")
+
+        """
+            resolve backup directory:
+            CLI parameter overrides config 'storage.destination',
+            which in turn overrides the current working directory.
+        """
+        if not self.backup_directory:
+            self.backup_directory = self.storage_destination or os.getcwd()
+
+        logging.debug(f"backup directory: {self.backup_directory}")
+
+        """
+            write credentials to a temporary defaults file so the password
+            is never exposed on the mariadb-dump command line
+        """
+        self.create_defaults_file()
 
         """
             create output directory
@@ -360,13 +382,32 @@ class MariaDBBackup():
         """
         self.notification_enabled = False
         self.notification_smtp_host = None
+        self.notification_smtp_port = 587
+        self.notification_smtp_tls = True
+        self.notification_smtp_username = None
+        self.notification_smtp_password = None
         self.notification_sender = None
         self.notification_recipient = None
+
+        self.storage_destination = None
 
         self.rotation_daily = 3
         self.rotation_weekly = 2
 
         self.db_skip_ssl = True
+
+        self.db_username = None
+        self.db_password = None
+        self.db_host = None
+        self.db_port = None
+        self.db_socket = None
+
+        self.excludes_databases = []
+        self.excludes_tables = []
+
+        if not filename or not os.path.exists(filename):
+            logging.debug(f"config file {filename} not found, using defaults")
+            return
 
         with open(filename) as file:
             content = yaml.load(file, Loader=yaml.FullLoader)
@@ -374,7 +415,6 @@ class MariaDBBackup():
             if content:
                 connection = content.get("connection", {})
                 storage = content.get("storage", {})
-                rotation = content.get("rotation", {})
                 notification = content.get("notification", {})
                 excludes = content.get("excludes", {})
 
@@ -386,7 +426,8 @@ class MariaDBBackup():
                     self.db_socket = connection.get("socket", None)
 
                 if storage:
-                    storage_destination = storage.get("destination", {})
+                    self.storage_destination = storage.get("destination", None)
+
                     rotation = storage.get("rotation", {})
 
                     self.rotation_daily = rotation.get("daily", 3)
@@ -413,6 +454,53 @@ class MariaDBBackup():
                     self.excludes_databases = excludes.get("databases", [])
                     self.excludes_tables = excludes.get("tables", [])
 
+    def create_defaults_file(self):
+        """
+            Schreibt die Zugangsdaten in eine temporäre Option-Datei (Rechte 0600),
+            damit das Passwort nicht über die Prozessliste (--password=...) sichtbar wird.
+            Die Datei wird beim Beenden des Scripts via atexit wieder entfernt.
+        """
+        lines = ["[client]"]
+
+        if self.db_username:
+            lines.append(f"user={self.db_username}")
+        if self.db_password:
+            # Anführungszeichen erlauben Sonderzeichen im Passwort
+            escaped = str(self.db_password).replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'password="{escaped}"')
+        if self.db_socket:
+            lines.append(f"socket={self.db_socket}")
+        if self.db_host:
+            lines.append(f"host={self.db_host}")
+            lines.append(f"port={self.db_port or 3306}")
+
+        # Nichts außer der Section-Überschrift -> keine Datei nötig
+        if len(lines) == 1:
+            return
+
+        # mkstemp erzeugt die Datei bereits mit Rechten 0600
+        fd, path = tempfile.mkstemp(prefix="mariadb-backup-", suffix=".cnf")
+        self.defaults_file = path
+        atexit.register(self.cleanup_defaults_file)
+
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+        logging.debug(f"wrote temporary defaults file: {path}")
+
+    def cleanup_defaults_file(self):
+        """
+            Entfernt die temporäre Option-Datei mit den Zugangsdaten.
+        """
+        if self.defaults_file and os.path.exists(self.defaults_file):
+            try:
+                os.remove(self.defaults_file)
+                logging.debug(f"removed temporary defaults file: {self.defaults_file}")
+            except OSError as e:
+                logging.error(
+                    f"could not remove temporary defaults file {self.defaults_file}: {e}")
+        self.defaults_file = None
+
     def dump_options(self):
         """
         """
@@ -431,48 +519,13 @@ class MariaDBBackup():
             '--single-transaction',
             '--no-create-info']
 
-        if len(self.db_username) != 0:
-            opt.append('--user')
-            opt.append(self.db_username)
-            opt_only_schema.append('--user')
-            opt_only_schema.append(self.db_username)
-            opt_only_data.append('--user')
-            opt_only_data.append(self.db_username)
-
-        if len(self.db_password) != 0:
-            opt.append(f'--password={self.db_password}')
-            opt_only_schema.append(f'--password={self.db_password}')
-            opt_only_data.append(f'--password={self.db_password}')
-
-        if self.db_socket and len(self.db_socket) != 0:
-            opt.append('--socket')
-            opt.append(self.db_socket)
-            opt_only_schema.append('--socket')
-            opt_only_schema.append(self.db_socket)
-            opt_only_data.append('--socket')
-            opt_only_data.append(self.db_socket)
-
-        if self.db_host and len(self.db_host) != 0:
-            opt.append('--host')
-            opt.append(self.db_host)
-            opt_only_schema.append('--host')
-            opt_only_schema.append(self.db_host)
-            opt_only_data.append('--host')
-            opt_only_data.append(self.db_host)
-            if self.db_port is not None:
-                opt.append('--port')
-                opt.append(str(self.db_port))
-                opt_only_schema.append('--port')
-                opt_only_schema.append(str(self.db_port))
-                opt_only_data.append('--port')
-                opt_only_data.append(str(self.db_port))
-            else:
-                opt.append('--port')
-                opt.append(str(3306))
-                opt_only_schema.append('--port')
-                opt_only_schema.append(str(3306))
-                opt_only_data.append('--port')
-                opt_only_data.append(str(3306))
+        # --defaults-extra-file muss die erste Option sein und enthält
+        # user/password/host/port/socket (siehe create_defaults_file)
+        if self.defaults_file:
+            defaults_arg = f'--defaults-extra-file={self.defaults_file}'
+            opt.insert(0, defaults_arg)
+            opt_only_schema.insert(0, defaults_arg)
+            opt_only_data.insert(0, defaults_arg)
 
         if self.db_skip_ssl:
             opt.append('--skip-ssl')
@@ -497,11 +550,14 @@ class MariaDBBackup():
         except Exception as e:
             logging.error(
                 f"   {bcolors.FAIL}Cannot execute SQL {query}: {e}{bcolors.ENDC}")
-            os._exit(1)
+            sys.exit(1)
 
         if rows:
             for index in range(len(rows)):
                 all_db_names.append(rows[index].get("Database", None))
+
+        cursor.close()
+        conn.close()
 
         # logging.debug(f"   {bcolors.DEBUG}{all_db_names}{bcolors.ENDC}")
         return all_db_names
@@ -574,14 +630,23 @@ class MariaDBBackup():
                 # create zip archive ...
                 # shutil.make_archive(_directory, 'zip', _directory)
 
+    def _redact(self, args):
+        """
+            Maskiert das Passwort, damit es nicht in Logs/E-Mails landet.
+        """
+        return [
+            "--password=***" if isinstance(a, str) and a.startswith("--password=") else a
+            for a in args
+        ]
+
     def _dump(self, dump_file, args):
 
-        cmdline = list2cmdline(args)
+        cmdline = list2cmdline(self._redact(args))
 
         stdout = open(dump_file, "w", 1)      # line-buffered
 
         try:
-            process = Popen(args, stdout=stdout, stderr=PIPE, close_fds=True)
+            process = Popen(args, stdout=stdout, stderr=PIPE, close_fds=True, text=True)
             _, stderr = process.communicate()
             rc = process.returncode
 
@@ -597,42 +662,40 @@ class MariaDBBackup():
                 logging.error(f"   dump file: {dump_file}")
                 logging.error(f"   cmd line : {cmdline}")
 
-                for line in process.stdout:
-                    sys.stdout.write(line)
-
-            process.wait()
-            stdout.close()
-
-            # ret_code = process.wait()
         except OSError:
             logging.error("Failed to find mariadb-dump binary")
             sys.exit(1)
+        finally:
+            stdout.close()
 
     def _mysql_connect(self):
         """
         """
         config = {}
 
-        config_file = self.mycnf_file
+        # Single source of truth for credentials: the temporary defaults file
+        # built from the configuration (see create_defaults_file). It is shared
+        # with mariadb-dump. An explicit --mycnf file serves as fallback if no
+        # defaults file was written.
+        config_file = self.defaults_file or self.mycnf_file
 
         if config_file and os.path.exists(config_file):
             config['read_default_file'] = config_file
+        else:
+            # No option file available -> fall back to inline parameters
+            if self.db_username is not None:
+                config['user'] = self.db_username
+            if self.db_password is not None:
+                config['passwd'] = self.db_password
+            if self.db_host is not None and len(str(self.db_host)) > 0:
+                config['host'] = self.db_host
+                if self.db_port is not None and len(str(self.db_port)) > 0:
+                    config['port'] = self.db_port
+                else:
+                    config['port'] = 3306
 
-        # If dba_user or dba_password are given, they should override the
-        # config file
-        if self.db_username is not None:
-            config['user'] = self.db_username
-        if self.db_password is not None:
-            config['passwd'] = self.db_password
-        if self.db_host is not None and len(str(self.db_host)) > 0:
-            config['host'] = self.db_host
-            if self.db_port is not None and len(str(self.db_port)) > 0:
-                config['port'] = self.db_port
-            else:
-                config['port'] = 3306
-
-        if self.db_socket is not None:
-            config['unix_socket'] = self.db_socket
+            if self.db_socket is not None:
+                config['unix_socket'] = self.db_socket
 
         logging.debug(f"{bcolors.DEBUG}config : {config}{bcolors.ENDC}")
 
@@ -652,8 +715,7 @@ class MariaDBBackup():
 
             logging.error(f"  {bcolors.FAIL}{message}{bcolors.ENDC}")
 
-            os._exit(1)
-            return (None, None, True, message)
+            sys.exit(1)
         # finally:
         #     #if db_connection.is_connected():
         #     #cursor.close()
@@ -671,9 +733,12 @@ class MariaDBBackup():
         """
             Extrahiert das Erstellungsdatum aus dem Verzeichnisnamen im Format '%Y%m%d-%H%M'.
         """
+        # Optionales wöchentliches Präfix "KW<woche>_" entfernen
+        if name.startswith("KW") and "_" in name:
+            name = name.split("_", 1)[1]
         try:
-            # Nur das Datum extrahieren
-            return datetime.datetime.strptime(name[:11], "%Y%m%d-%H%M").date()
+            # Nur das Datum extrahieren (Format: YYYYMMDD-HHMM, 13 Zeichen)
+            return datetime.datetime.strptime(name[:13], "%Y%m%d-%H%M").date()
         except ValueError:
             return None
 
@@ -726,15 +791,17 @@ class MariaDBBackup():
                         f"delete excess daily backup {old_backup.name}")
 
         # **6. Maximal rotation_weekly wöchentliche Backups behalten**
-        sorted_weeks = sorted(weekly_backups.keys(),
-                              reverse=True)  # Neueste zuerst
+        sorted_weeks = sorted(
+            weekly_backups.keys(),
+            reverse=True)  # Neueste zuerst
         # Behalte die neuesten
         weeks_to_delete = sorted_weeks[self.rotation_weekly:]
 
         for week in weeks_to_delete:
             for entry in weekly_backups[week]:
-                self.delete_directory(entry)
                 logging.info(f"delete weekly backup {entry.name}")
+                self.delete_directory(entry)
+
 
     def delete_directory(self, directory):
         """
