@@ -1,0 +1,31 @@
+# Go build artifacts
+/dist/
+/mariadb-backup
+*.test
+*.out
+
+# Logs
+*.log
+
+# Python leftovers
+__pycache__/
+*.pyc
+
+# Stale local backup directories (test runs, not part of the project)
+20250219-2000
+20250221-1714
+20250221-1715
+20250221-1719
+20250221-1720
+20250221-1838
+20250221-1839
+20250221-2000
+20250226-2000
+20250416-1710
+KW1_*
+KW2_*
+KW3_*
+KW4_*
+KW5_*
+KW6_*
+KW7_*
