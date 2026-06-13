@@ -1,9 +1,11 @@
-// Package rotate reproduces, 1:1, the retention logic of the Python script's
+// Package rotate reproduces the retention logic of the Python script's
 // rotate_directories and get_creation_date — including its quirks (the
 // hardcoded max of 5 backups per calendar day, and the fact that a directory
 // renamed to a weekly KW<week>_ backup is still referenced by its original
 // name/path for the remainder of the run). Behaviour is deliberately preserved
-// because altering backup deletion is risky.
+// because altering backup deletion is risky, with one fix over the Python
+// original: directories that are already weekly KW<week>_ backups are no longer
+// re-prefixed on each run (the Python version produced KW20_KW20_... names).
 package rotate
 
 import (
@@ -98,8 +100,10 @@ func Rotate(baseDir string, daily, weekly int, now time.Time, fs FileSystem, log
 		// 1. Group for the per-day cap (every dir, including KW ones).
 		dailyBackups[date] = append(dailyBackups[date], entry)
 
-		// 2. Rename Sunday backups to a weekly KW<week>_ name.
-		if date.Weekday() == time.Sunday {
+		// 2. Rename Sunday backups to a weekly KW<week>_ name. Skip dirs that
+		//    are already weekly backups, otherwise their existing KW<week>_
+		//    prefix would be doubled (KW20_KW20_...) on every run.
+		if date.Weekday() == time.Sunday && !strings.HasPrefix(e.Name, "KW") {
 			newName := fmt.Sprintf("KW%s_%s", week, e.Name)
 			newPath := joinPath(baseDir, newName)
 			if !fs.Exists(newPath) {

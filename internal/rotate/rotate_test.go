@@ -93,6 +93,19 @@ func TestSundayRename(t *testing.T) {
 	}
 }
 
+func TestSundayRenameSkipsExistingWeeklyBackup(t *testing.T) {
+	// A backup already named KW<week>_ whose date falls on a Sunday must not be
+	// re-prefixed to KW<week>_KW<week>_... on subsequent runs.
+	fs := newFakeFS("KW07_20250216-2000") // 2025-02-16 is a Sunday, ISO week 7
+	now := mustDate(t, "2025-02-20")
+	if err := Rotate(baseDir, 100, 100, now, fs, logging.NewCapture()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fs.renames) != 0 {
+		t.Errorf("weekly backup must not be re-prefixed, got renames %v", fs.renames)
+	}
+}
+
 func TestSundayRenameSkippedWhenTargetExists(t *testing.T) {
 	fs := newFakeFS("20250216-2000")
 	fs.exists[baseDir+"/KW07_20250216-2000"] = true // target already there
