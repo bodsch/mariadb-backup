@@ -1,0 +1,46 @@
+---
+
+connection:
+  encrypted_login: false
+  username: ''
+  password: ''
+  host: ''
+  port: ''
+  socket: /run/mysqld/mysqld.sock
+  commpress_communication: true
+  login_cnf_file: ''
+  use_ssl: false
+  max_allowed_packet: ''
+  single_transaction: true
+
+storage:
+  destination: /var/backup
+  rotation:
+    # Set rotation of daily backups. VALUE*24hours
+    # If you want to keep only today's backups, you could choose 1,
+    # i.e. everything older than 24hours will be removed.
+    daily: 2
+    weekly: 2
+
+notification:
+  enabled: false
+  smtp:
+    server_name: ""             # smtp.example.com
+    port: ""                    # 587
+    tls: false
+    auth:
+      username: ""
+      password: ""
+  sender: ""                    # backup@example.com
+  recipient: ""                 # admin@foo.bar
+
+excludes:
+  databases:
+    - performance_schema
+    - information_schema
+    - sys
+  tables: []
+
+includes:
+  databases: []
+  tables: []

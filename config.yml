@@ -1,46 +1,50 @@
 ---
 
+# Database connection. Credentials are written to a temporary 0600 options file
+# for mariadb-dump (so the password never appears on the process list) and are
+# also used to build the connection for listing databases.
 connection:
-  encrypted_login: false
   username: ''
   password: ''
   host: ''
-  port: ''
+  port: ''                       # empty -> 3306 when a host is set
   socket: /run/mysqld/mysqld.sock
-  commpress_communication: true
-  login_cnf_file: ''
-  use_ssl: false
-  max_allowed_packet: ''
-  single_transaction: true
 
 storage:
-  destination: /var/backup
+  # Target directory for the backups.
+  # Overridden by the -d/--directory command line parameter.
+  # Defaults to the current working directory if unset.
+  destination: /var/backup/mariadb
+
+  # Compress each dump file with gzip (schema.sql.gz / data.sql.gz).
+  # One of: none | gzip. Overridden by the --compress flag.
+  compression: none
+
   rotation:
-    # Set rotation of daily backups. VALUE*24hours
-    # If you want to keep only today's backups, you could choose 1,
-    # i.e. everything older than 24hours will be removed.
+    # Daily (non-weekly) backups older than this many calendar days are removed
+    # (weekly KW<week> backups are exempt). Omit the key to use the default (3);
+    # an explicit 0 keeps only today's backups.
     daily: 2
+    # Number of weekly (Sunday) backups to keep, counted per ISO year+week.
+    # Omit the key to use the default (2); 0 keeps no weekly backups.
     weekly: 2
 
 notification:
   enabled: false
   smtp:
-    server_name: ""             # smtp.example.com
-    port: ""                    # 587
-    tls: false
+    server_name: ""              # smtp.example.com
+    port: 587
+    tls: true
     auth:
       username: ""
       password: ""
-  sender: ""                    # backup@example.com
-  recipient: ""                 # admin@foo.bar
+  sender: ""                     # backup@example.com
+  recipient: ""                  # admin@foo.bar
 
 excludes:
   databases:
     - performance_schema
     - information_schema
     - sys
-  tables: []
-
-includes:
-  databases: []
+  # Tables to skip, given as fully-qualified db.table entries.
   tables: []
