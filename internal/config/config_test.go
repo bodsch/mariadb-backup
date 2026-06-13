@@ -35,6 +35,32 @@ func TestLoadMissingReturnsDefaults(t *testing.T) {
 	}
 }
 
+func TestExplicitRotationZeroPreserved(t *testing.T) {
+	content := "storage:\n  rotation:\n    daily: 0\n    weekly: 0\n"
+	cfg, err := Load(writeTemp(t, content), logging.NewCapture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Storage.Rotation.Daily != 0 || cfg.Storage.Rotation.Weekly != 0 {
+		t.Errorf("explicit 0 must be preserved, got %+v", cfg.Storage.Rotation)
+	}
+}
+
+func TestOmittedRotationGetsDefaults(t *testing.T) {
+	// rotation present but daily omitted -> default; weekly explicit -> kept.
+	content := "storage:\n  rotation:\n    weekly: 5\n"
+	cfg, err := Load(writeTemp(t, content), logging.NewCapture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Storage.Rotation.Daily != 3 {
+		t.Errorf("omitted daily should default to 3, got %d", cfg.Storage.Rotation.Daily)
+	}
+	if cfg.Storage.Rotation.Weekly != 5 {
+		t.Errorf("explicit weekly should be kept, got %d", cfg.Storage.Rotation.Weekly)
+	}
+}
+
 func TestLoadDeprecationWarning(t *testing.T) {
 	content := `
 connection:

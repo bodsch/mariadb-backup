@@ -52,10 +52,35 @@ type Storage struct {
 	Rotation    Rotation `yaml:"rotation"`
 }
 
-// Rotation configures backup retention.
+// Rotation configures backup retention. dailySet/weeklySet record whether the
+// key was present in the YAML so an explicit 0 is preserved instead of being
+// treated as "unset" and overwritten with the default.
 type Rotation struct {
-	Daily  int `yaml:"daily"`
-	Weekly int `yaml:"weekly"`
+	Daily     int `yaml:"daily"`
+	Weekly    int `yaml:"weekly"`
+	dailySet  bool
+	weeklySet bool
+}
+
+// UnmarshalYAML decodes daily/weekly while recording which keys were present,
+// so applyDefaults can distinguish an omitted key from a deliberate 0.
+func (r *Rotation) UnmarshalYAML(value *yaml.Node) error {
+	var raw struct {
+		Daily  *int `yaml:"daily"`
+		Weekly *int `yaml:"weekly"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	if raw.Daily != nil {
+		r.Daily = *raw.Daily
+		r.dailySet = true
+	}
+	if raw.Weekly != nil {
+		r.Weekly = *raw.Weekly
+		r.weeklySet = true
+	}
+	return nil
 }
 
 // Notification configures the optional log email.
@@ -95,10 +120,10 @@ func Default() *Config {
 }
 
 func (c *Config) applyDefaults() {
-	if c.Storage.Rotation.Daily == 0 {
+	if !c.Storage.Rotation.dailySet {
 		c.Storage.Rotation.Daily = defaultRotationDaily
 	}
-	if c.Storage.Rotation.Weekly == 0 {
+	if !c.Storage.Rotation.weeklySet {
 		c.Storage.Rotation.Weekly = defaultRotationWeekly
 	}
 	if c.Storage.Compression == "" {

@@ -185,6 +185,43 @@ func TestWeeklyRetention(t *testing.T) {
 	}
 }
 
+func TestWeeklyRetentionDistinguishesYears(t *testing.T) {
+	// Same ISO week number (01) in two different years must be treated as two
+	// distinct weeks, not merged into one bucket. With weekly=1 the older year
+	// is deleted and the newer kept. Tuesday/Thursday dates avoid the Sunday
+	// rename step.
+	fs := newFakeFS(
+		"KW01_20240102-2000", // ISO 2024-W01 (Tue)
+		"KW01_20250102-2000", // ISO 2025-W01 (Thu)
+	)
+	now := mustDate(t, "2025-02-20")
+	if err := Rotate(baseDir, 100, 1, now, fs, logging.NewCapture()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fs.removed) != 1 || fs.removed[0] != baseDir+"/KW01_20240102-2000" {
+		t.Errorf("removed=%v, want only the older year KW01_20240102-2000", fs.removed)
+	}
+}
+
+func TestAgeDeleteAcrossDSTBoundary(t *testing.T) {
+	// Between two local midnights that straddle a spring-forward transition the
+	// span is 47h; truncating /24 would yield age 1 (a day short) and wrongly
+	// keep a backup that is 2 calendar days old. Rounding matches Python's
+	// date subtraction.
+	loc, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skipf("no tzdata for Europe/Berlin: %v", err)
+	}
+	fs := newFakeFS("20250329-2000") // Sat, day before DST switch (2025-03-30)
+	now := time.Date(2025, 3, 31, 12, 0, 0, 0, loc)
+	if err := Rotate(baseDir, 1, 100, now, fs, logging.NewCapture()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fs.removed) != 1 || fs.removed[0] != baseDir+"/20250329-2000" {
+		t.Errorf("age across DST: removed=%v, want /20250329-2000 (age 2 > daily 1)", fs.removed)
+	}
+}
+
 func TestNonDirEntriesIgnored(t *testing.T) {
 	fs := &fakeFS{exists: map[string]bool{}}
 	fs.entries = []Entry{{Name: "20250210-2000", IsDir: false}} // a file, not a dir

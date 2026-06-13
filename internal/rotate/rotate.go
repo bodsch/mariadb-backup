@@ -10,6 +10,7 @@ package rotate
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -59,10 +60,10 @@ func creationDate(name string, loc *time.Location) (t time.Time, ok bool) {
 }
 
 type dirEntry struct {
-	name string // original on-disk name (used throughout, even after rename)
-	path string // original path (deletes target this, matching Python)
-	date time.Time
-	week string // ISO week, zero-padded to 2 digits
+	name    string // original on-disk name (used throughout, even after rename)
+	path    string // original path (deletes target this, matching Python)
+	date    time.Time
+	weekKey string // ISO year+week ("2025-07"), so weeks in different years never collide
 }
 
 // Rotate applies the retention policy to baseDir. now is injected for
@@ -80,7 +81,7 @@ func Rotate(baseDir string, daily, weekly int, now time.Time, fs FileSystem, log
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 
 	dailyBackups := map[time.Time][]dirEntry{} // keyed by date
-	weeklyBackups := map[string][]dirEntry{}   // keyed by ISO week string
+	weeklyBackups := map[string][]dirEntry{}   // keyed by ISO year+week string
 
 	for _, e := range entries {
 		if !e.IsDir {
@@ -90,12 +91,19 @@ func Rotate(baseDir string, daily, weekly int, now time.Time, fs FileSystem, log
 		if !ok {
 			continue
 		}
-		ageDays := int(today.Sub(date).Hours() / 24)
-		_, isoWeek := date.ISOWeek()
+		// Age in whole calendar days, rounded rather than truncated: between two
+		// local midnights a DST transition makes the span 23h or 25h, which
+		// truncating division by 24 would push to the wrong day. Matches
+		// Python's date-based subtraction.
+		ageDays := int(math.Round(today.Sub(date).Hours() / 24))
+		isoYear, isoWeek := date.ISOWeek()
 		week := fmt.Sprintf("%02d", isoWeek)
+		// Bucket key carries the ISO year so week 52 of two different years (or
+		// week 01 across a year boundary) never collide in weekly retention.
+		weekKey := fmt.Sprintf("%04d-%02d", isoYear, isoWeek)
 		path := joinPath(baseDir, e.Name)
 
-		entry := dirEntry{name: e.Name, path: path, date: date, week: week}
+		entry := dirEntry{name: e.Name, path: path, date: date, weekKey: weekKey}
 
 		// 1. Group for the per-day cap (every dir, including KW ones).
 		dailyBackups[date] = append(dailyBackups[date], entry)
@@ -125,7 +133,7 @@ func Rotate(baseDir string, daily, weekly int, now time.Time, fs FileSystem, log
 
 		// 4. Collect dirs whose original name is already a weekly backup.
 		if strings.HasPrefix(e.Name, "KW") {
-			weeklyBackups[week] = append(weeklyBackups[week], entry)
+			weeklyBackups[weekKey] = append(weeklyBackups[weekKey], entry)
 		}
 	}
 

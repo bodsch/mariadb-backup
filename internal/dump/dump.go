@@ -5,6 +5,7 @@
 package dump
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -82,6 +83,13 @@ func (d *Dumper) dumpOne(dir, db string, set optionSet) (failed bool, fatal erro
 	closeErr := w.Close()
 
 	if runErr != nil {
+		// newWriter created (and Close just flushed) the output file before the
+		// dump binary failed to start. Remove the empty/partial file so it is
+		// not mistaken for a valid (empty) backup.
+		if rmErr := os.Remove(filepath.Join(dir, name)); rmErr != nil && !os.IsNotExist(rmErr) {
+			d.Log.Error("   %scould not remove incomplete dump %s: %v%s",
+				logging.ColorFail, name, rmErr, logging.ColorReset)
+		}
 		d.Log.Error("Failed to find %s binary", dumpBinary)
 		return false, runErr
 	}

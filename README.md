@@ -65,13 +65,24 @@ streaming-compressed as `schema.sql.gz` / `data.sql.gz`. Default is uncompressed
 
 ## Rotation
 
-The retention behaviour is intentionally identical to the original script:
+The retention behaviour follows the original script, with a few corrections to
+quirks of the Python version (see below):
 
 - Backups created on a **Sunday** are renamed to `KW<week>_<timestamp>` and kept
-  as weekly backups; the newest `rotation.weekly` weeks are kept.
-- Non-weekly backups older than `rotation.daily` **days** are removed.
+  as weekly backups. Directories that are *already* weekly backups are left
+  untouched (the Python version re-prefixed them into `KW20_KW20_…` on every
+  run).
+- The newest `rotation.weekly` weeks are kept; older weekly backups are removed.
+  Weeks are counted per **ISO year + week**, so the same week number in two
+  different years (e.g. `KW52` of 2024 and 2025) is never merged into one bucket.
+- Non-weekly backups older than `rotation.daily` **calendar days** are removed.
+  The age is computed in whole calendar days, so a daylight-saving transition
+  cannot shift it by a day.
 - At most **5** backups are kept per calendar day (a fixed cap, independent of
   `rotation.daily`).
+
+`rotation.daily`/`rotation.weekly` default to `3`/`2` when the key is omitted; an
+explicit `0` is honoured (e.g. `weekly: 0` keeps no weekly backups).
 
 Backup directory names use the local-time format `YYYYMMDD-HHMM`.
 

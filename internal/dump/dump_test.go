@@ -107,6 +107,19 @@ func TestDumpDatabaseBinaryNotFoundIsFatal(t *testing.T) {
 	}
 }
 
+func TestDumpDatabaseBinaryNotFoundLeavesNoFile(t *testing.T) {
+	out := t.TempDir()
+	d := &Dumper{Log: logging.NewCapture(), Runner: &fakeRunner{err: ErrBinaryNotFound}}
+	if _, err := d.DumpDatabase(out, "mydb", mkdirReal); err == nil {
+		t.Fatal("expected fatal error when binary not found")
+	}
+	// The empty file created before the binary failed must not be left behind.
+	p := filepath.Join(out, "mydb", "schema.sql")
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("incomplete dump file %s should have been removed (err=%v)", p, err)
+	}
+}
+
 func TestDumpDatabaseGzip(t *testing.T) {
 	out := t.TempDir()
 	d := &Dumper{Compress: true, Log: logging.NewCapture(), Runner: &fakeRunner{content: "-- sql data\n"}}
