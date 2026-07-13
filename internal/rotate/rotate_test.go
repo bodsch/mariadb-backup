@@ -78,7 +78,7 @@ func TestCreationDate(t *testing.T) {
 func TestSundayRename(t *testing.T) {
 	fs := newFakeFS("20250216-2000") // 2025-02-16 is a Sunday, ISO week 7
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",100, 100, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 100, 100, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.renames) != 1 {
@@ -128,7 +128,7 @@ func TestSundayRenameSkipsExistingWeeklyBackup(t *testing.T) {
 	// re-prefixed to KW<week>_KW<week>_... on subsequent runs.
 	fs := newFakeFS("KW07_20250216-2000") // 2025-02-16 is a Sunday, ISO week 7
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",100, 100, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 100, 100, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.renames) != 0 {
@@ -140,7 +140,7 @@ func TestSundayRenameSkippedWhenTargetExists(t *testing.T) {
 	fs := newFakeFS("20250216-2000")
 	fs.exists[baseDir+"/KW07_20250216-2000"] = true // target already there
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",100, 100, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 100, 100, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.renames) != 0 {
@@ -156,7 +156,7 @@ func TestAgeDelete(t *testing.T) {
 		"KW06_20250204-2000", // KW -> never age-deleted
 	)
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",3, 100, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 3, 100, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if got := fs.removed; len(got) != 1 || got[0] != baseDir+"/20250210-2000" {
@@ -168,7 +168,7 @@ func TestAgeDeleteBoundaryIsStrict(t *testing.T) {
 	// age exactly == daily must NOT delete (Python uses strict >).
 	fs := newFakeFS("20250217-2000") // Mon, age 3
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",3, 100, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 3, 100, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.removed) != 0 {
@@ -184,7 +184,7 @@ func TestMaxFivePerDayIndependentOfDaily(t *testing.T) {
 	for _, daily := range []int{2, 100} {
 		fs := newFakeFS(names...)
 		now := mustDate(t, "2025-02-18") // age 0, so no age-based deletion
-		if err := Rotate(baseDir, "",daily, 100, now, fs, logging.NewCapture()); err != nil {
+		if err := Rotate(baseDir, "", daily, 100, now, fs, logging.NewCapture()); err != nil {
 			t.Fatal(err)
 		}
 		sort.Strings(fs.removed)
@@ -204,7 +204,7 @@ func TestWeeklyRetention(t *testing.T) {
 		"KW08_20250218-2000", // ISO week 8
 	)
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",100, 2, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 100, 2, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.removed) != 1 || fs.removed[0] != baseDir+"/KW06_20250204-2000" {
@@ -225,7 +225,7 @@ func TestWeeklyRetentionDistinguishesYears(t *testing.T) {
 		"KW01_20250102-2000", // ISO 2025-W01 (Thu)
 	)
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",100, 1, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 100, 1, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.removed) != 1 || fs.removed[0] != baseDir+"/KW01_20240102-2000" {
@@ -244,7 +244,7 @@ func TestAgeDeleteAcrossDSTBoundary(t *testing.T) {
 	}
 	fs := newFakeFS("20250329-2000") // Sat, day before DST switch (2025-03-30)
 	now := time.Date(2025, 3, 31, 12, 0, 0, 0, loc)
-	if err := Rotate(baseDir, "",1, 100, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 1, 100, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.removed) != 1 || fs.removed[0] != baseDir+"/20250329-2000" {
@@ -256,7 +256,7 @@ func TestNonDirEntriesIgnored(t *testing.T) {
 	fs := &fakeFS{exists: map[string]bool{}}
 	fs.entries = []Entry{{Name: "20250210-2000", IsDir: false}} // a file, not a dir
 	now := mustDate(t, "2025-02-20")
-	if err := Rotate(baseDir, "",1, 1, now, fs, logging.NewCapture()); err != nil {
+	if err := Rotate(baseDir, "", 1, 1, now, fs, logging.NewCapture()); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.removed) != 0 || len(fs.renames) != 0 {
