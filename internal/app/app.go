@@ -193,7 +193,7 @@ func RunWith(opts Options, deps Dependencies) int {
 	if opts.DryRun {
 		fs = rotate.DryRunFileSystem{Log: log}
 	}
-	if err := rotate.Rotate(backupDir, cfg.Storage.Rotation.Daily, cfg.Storage.Rotation.Weekly, n, fs, log); err != nil {
+	if err := rotate.Rotate(backupDir, datetime, cfg.Storage.Rotation.Daily, cfg.Storage.Rotation.Weekly, n, fs, log); err != nil {
 		log.Error("%srotation error: %v%s", logging.ColorFail, err, logging.ColorReset)
 	}
 
