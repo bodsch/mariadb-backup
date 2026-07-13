@@ -41,6 +41,10 @@ a few long-standing bugs were fixed deliberately (see Changed/Fixed).
 - Events are now included in dumps. The Python original built the global option
   group `--quote-names --opt --events` but never passed it to `mariadb-dump`, so
   events were silently omitted; the options are now applied.
+- The backup created in the current run is no longer renamed to a weekly
+  `KW<week>_` backup in that same run. Previously a backup taken on a Sunday was
+  promoted to a weekly backup the instant it was written; it now stays a daily
+  backup and is only promoted on a later run (before it can be age-deleted).
 
 ### Removed
 

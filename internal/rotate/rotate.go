@@ -3,9 +3,16 @@
 // hardcoded max of 5 backups per calendar day, and the fact that a directory
 // renamed to a weekly KW<week>_ backup is still referenced by its original
 // name/path for the remainder of the run). Behaviour is deliberately preserved
-// because altering backup deletion is risky, with one fix over the Python
-// original: directories that are already weekly KW<week>_ backups are no longer
-// re-prefixed on each run (the Python version produced KW20_KW20_... names).
+// because altering backup deletion is risky, with two fixes over the Python
+// original:
+//   - directories that are already weekly KW<week>_ backups are no longer
+//     re-prefixed on each run (the Python version produced KW20_KW20_... names).
+//   - the backup created in the current run (currentName) is never renamed to a
+//     weekly KW<week>_ backup in that same run. The Python version rotated over
+//     every directory including the one it had just written, so a Sunday backup
+//     was turned into a weekly backup the instant it was created. A fresh backup
+//     now stays a plain daily backup and is only promoted to weekly on a later
+//     run (before it can be age-deleted, since rename precedes the age check).
 package rotate
 
 import (
@@ -66,9 +73,12 @@ type dirEntry struct {
 	weekKey string // ISO year+week ("2025-07"), so weeks in different years never collide
 }
 
-// Rotate applies the retention policy to baseDir. now is injected for
+// Rotate applies the retention policy to baseDir. currentName is the directory
+// name written by the current run (e.g. "20260712-1244"); it is excluded from
+// the Sunday weekly-rename so a just-created backup is not promoted to weekly in
+// the same run. Pass "" to rotate every directory. now is injected for
 // deterministic tests; fs performs (or, in dry-run, only logs) the mutations.
-func Rotate(baseDir string, daily, weekly int, now time.Time, fs FileSystem, log logging.Logger) error {
+func Rotate(baseDir, currentName string, daily, weekly int, now time.Time, fs FileSystem, log logging.Logger) error {
 	loc := now.Location()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
@@ -110,8 +120,10 @@ func Rotate(baseDir string, daily, weekly int, now time.Time, fs FileSystem, log
 
 		// 2. Rename Sunday backups to a weekly KW<week>_ name. Skip dirs that
 		//    are already weekly backups, otherwise their existing KW<week>_
-		//    prefix would be doubled (KW20_KW20_...) on every run.
-		if date.Weekday() == time.Sunday && !strings.HasPrefix(e.Name, "KW") {
+		//    prefix would be doubled (KW20_KW20_...) on every run. Also skip the
+		//    backup just written in this run so it stays a daily backup and is
+		//    only promoted to weekly on a later run.
+		if date.Weekday() == time.Sunday && !strings.HasPrefix(e.Name, "KW") && e.Name != currentName {
 			newName := fmt.Sprintf("KW%s_%s", week, e.Name)
 			newPath := joinPath(baseDir, newName)
 			if !fs.Exists(newPath) {
